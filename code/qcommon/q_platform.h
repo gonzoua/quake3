@@ -199,6 +199,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #ifdef __i386__
 #define ARCH_STRING "i386"
+#elif defined __arm__
+#define ARCH_STRING "arm"
 #elif defined __axp__
 #define ARCH_STRING "alpha"
 #endif
