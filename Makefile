@@ -582,7 +582,11 @@ ifeq ($(PLATFORM),freebsd)
 
   CLIENT_LIBS =
 
-  CLIENT_LIBS += $(shell sdl-config --libs) -lGL
+  ifeq ($(ARCH),arm)
+    CLIENT_LIBS=
+  else
+    CLIENT_LIBS=$(shell sdl-config --libs) -lGL
+  endif
 
   ifeq ($(USE_OPENAL),1)
     ifneq ($(USE_OPENAL_DLOPEN),1)
@@ -968,11 +972,11 @@ default: release
 all: debug release
 
 debug:
-	@$(MAKE) targets B=$(BD) CFLAGS="$(CFLAGS) $(DEPEND_CFLAGS) \
+	@$(MAKE) targets B=$(BD) CFLAGS="$(BASE_CFLAGS) $(CFLAGS) $(DEPEND_CFLAGS) \
 		$(DEBUG_CFLAGS)" V=$(V)
 
 release:
-	@$(MAKE) targets B=$(BR) CFLAGS="$(CFLAGS) $(DEPEND_CFLAGS) \
+	@$(MAKE) targets B=$(BR) CFLAGS="$(BASE_CFLAGS) $(CFLAGS) $(DEPEND_CFLAGS) \
 		$(RELEASE_CFLAGS)" V=$(V)
 
 # Create the build directories, check libraries and print out
@@ -1379,26 +1383,26 @@ Q3OBJ = \
   $(B)/client/sys_main.o
 
 
-  Q3OBJ += $(if $(or $(findstring arm,$(ARCH)), $(USBDK)), \
-             $(B)/client/es_gamma.o $(B)/client/sdl_snd.o, \
-             $(B)/client/sdl_gamma.o $(B)/client/sdl_snd.o)
+#  Q3OBJ += $(if $(or $(findstring arm,$(ARCH)), $(USBDK)), \
+#             $(B)/client/es_gamma.o $(B)/client/sdl_snd.o, \
+#             $(B)/client/sdl_gamma.o $(B)/client/sdl_snd.o)
 
-  Q3OBJ += $(if $(USBDK), \
-             $(B)/client/es_input.o, \
-             $(B)/client/sdl_input.o)
+#  Q3OBJ += $(if $(USBDK), \
+#             $(B)/client/es_input.o, \
+#             $(B)/client/sdl_input.o)
 
 #
-#ifeq ($(ARCH),arm)
-#  Q3OBJ += \
-#    $(B)/client/es_gamma.o \
-#    $(B)/client/es_input.o \
-#    $(B)/client/es_snd.o 
-#else
-#  Q3OBJ += \
-#    $(B)/client/sdl_gamma.o \
-#    $(B)/client/sdl_input.o \
-#    $(B)/client/sdl_snd.o 
-#endif
+ifeq ($(ARCH),arm)
+  Q3OBJ += \
+    $(B)/client/es_gamma.o \
+    $(B)/client/es_input.o \
+    $(B)/client/es_snd.o 
+else
+  Q3OBJ += \
+    $(B)/client/sdl_gamma.o \
+    $(B)/client/sdl_input.o \
+    $(B)/client/sdl_snd.o 
+endif
 
 ifeq ($(ARCH),i386)
   Q3OBJ += \
