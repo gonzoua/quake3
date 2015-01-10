@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 # this script builds q3 for raspberry pi
 # invoke with ./
-# or ./build.sh clean to clean before build
+# or ./build_rpi_freebsd.sh clean to clean before build
 
 # directory containing the ARM shared libraries (rootfs, lib/ of SD card)
 # specifically libEGL.so and libGLESv2.so
@@ -16,7 +16,7 @@ BASEQ3_DIR="/baseq3/"
 INCLUDES="-I${ARM_ROOT}/opt/vc/include -I${ARM_ROOT}/opt/vc/include/interface/vcos/pthreads"
 
 # prefix of arm cross compiler installed
-# CROSS_COMPILE=armv6-freebsd-
+CROSS_COMPILE=/usr/armv6-freebsd/usr/bin/
 
 # clean
 if [ $# -ge 1 ] && [ $1 = clean ]; then
