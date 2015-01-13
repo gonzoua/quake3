@@ -27,261 +27,466 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // q3rev.cpp : Defines the entry point for the application.
 //
 
-#ifdef _WIN32
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-/*
-===============
-IN_TranslateSDLToQ3Key
-===============
-*/
-static keyNum_t IN_TranslateWinToQ3Key( int vk )
-{
-	switch( vk )
-	{
-		case VK_LEFT:         return K_LEFTARROW;
-		case VK_RIGHT:        return K_RIGHTARROW;
-		case VK_DOWN:         return K_DOWNARROW;
-		case VK_UP:           return K_UPARROW;
-		case VK_RETURN:       return K_ENTER;
-      case VK_CONTROL:      
-         return K_CTRL;
-      case VK_SHIFT:
-         return K_SHIFT;
-      case VK_ESCAPE:
-         return K_ESCAPE;
-	}
-
-   if (vk >= 'A' && vk <= 'Z' || vk >= '0' && vk <= '9')
-      return vk;
-
-	return 0;
-}
-
-// Forward declarations of functions included in this code module:
-ATOM				MyRegisterClass(HINSTANCE hInstance);
-BOOL				InitInstance(HINSTANCE, int);
-
-LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
-
-
-//
-//  FUNCTION: MyRegisterClass()
-//
-//  PURPOSE: Registers the window class.
-//
-//  COMMENTS:
-//
-//    This function and its usage are only necessary if you want this code
-//    to be compatible with Win32 systems prior to the 'RegisterClassEx'
-//    function that was added to Windows 95. It is important to call this function
-//    so that the application will get 'well formed' small icons associated
-//    with it.
-//
-ATOM MyRegisterClass(HINSTANCE hInstance)
-{
-	WNDCLASSEX wcex;
-
-	wcex.cbSize = sizeof(WNDCLASSEX);
-
-	wcex.style			= CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc	= WndProc;
-	wcex.cbClsExtra		= 0;
-	wcex.cbWndExtra		= 0;
-	wcex.hInstance		= hInstance;
-	wcex.hIcon			= NULL;
-	wcex.hCursor		= NULL;
-	wcex.hbrBackground	= (HBRUSH)(COLOR_WINDOW+1);
-	wcex.lpszMenuName	= NULL;
-	wcex.lpszClassName	= "Q3CLS";
-	wcex.hIconSm		= NULL;
-
-	return RegisterClassEx(&wcex);
-}
-
-//
-//   FUNCTION: InitInstance(HINSTANCE, int)
-//
-//   PURPOSE: Saves instance handle and creates main window
-//
-//   COMMENTS:
-//
-//        In this function, we save the instance handle in a global variable and
-//        create and display the main program window.
-//
-
-extern HINSTANCE g_hInstance;
-
-BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
-{
-   HWND hWnd;
-
-   hWnd = CreateWindow("Q3CLS", "Quake 3", WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
-
-   if (!hWnd)
-   {
-      return FALSE;
-   }
-
-   ShowWindow(hWnd, nCmdShow);
-   UpdateWindow(hWnd);
-
-   return TRUE;
-}
-
-//
-//  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
-//
-//  PURPOSE:  Processes messages for the main window.
-//
-//  WM_COMMAND	- process the application menu
-//  WM_PAINT	- Paint the main window
-//  WM_DESTROY	- post a quit message and return
-//
-//
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-	int wmId, wmEvent;
-	PAINTSTRUCT ps;
-	HDC hdc;
-	const char *character = NULL;
-	keyNum_t key = 0;
-
-	switch (message)
-	{
-	case WM_COMMAND:
-		wmId    = LOWORD(wParam);
-		wmEvent = HIWORD(wParam);
-		// Parse the menu selections:
-		switch (wmId)
-		{
-		default:
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-		break;
-	case WM_KEYDOWN:
-		key = IN_TranslateWinToQ3Key( wParam );
-
-		if( key )
-			Com_QueueEvent( 0, SE_KEY, key, qtrue, 0, NULL );
-		break;
-	case WM_KEYUP:
-		key = IN_TranslateWinToQ3Key( wParam );
-
-		if( key )
-			Com_QueueEvent( 0, SE_KEY, key, qfalse, 0, NULL );
-		break;
-   case WM_CHAR:
-		Com_QueueEvent( 0, SE_CHAR, wParam, 0, 0, NULL );
-      break;
-	case WM_PAINT:
-		hdc = BeginPaint(hWnd, &ps);
-		// TODO: Add any drawing code here...
-		EndPaint(hWnd, &ps);
-		break;
-	case WM_DESTROY:
-		PostQuitMessage(0);
-		break;
-	default:
-		return DefWindowProc(hWnd, message, wParam, lParam);
-	}
-	return 0;
-}
-
-/*
-===============
-IN_ProcessEvents
-===============
-*/
-static void IN_ProcessEvents( void )
-{
-   MSG msg;
-
-   if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE)) {
-      if (!GetMessage(&msg, NULL, 0, 0))
-         Sys_Quit();
-
-      TranslateMessage(&msg);
-      DispatchMessage(&msg);
-   }
-}
-
-/*
-===============
-IN_Init
-===============
-*/
-void IN_Init( void )
-{
-	MyRegisterClass(g_hInstance);
-   InitInstance (g_hInstance, SW_SHOW);
-}
-
-#else
-
 #include <unistd.h>
 #include <termios.h>
 #include <stdio.h>
 #include <sys/select.h>
+#include <sys/mouse.h>
+#include <fcntl.h>
+#include <unistd.h>
 
-#define NB_DISABLE 	0
-#define NB_ENABLE	1
+#include <termios.h>
+#include <sys/kbio.h>
 
-int kbhit( void )
+#include "es_scancodes.h"
+
+static int mouse_fd = -1;
+static uint8_t mouse_buttons = MOUSE_SYS_STDBUTTONS;
+
+static int kbd_fd = -1;
+static struct termios kbd_orig_tty;
+static int orig_kbd_mode;
+static int kbd_orig_repeat[2];
+
+void init_kbd(const char *devname)
+{
+	struct termios kbdtty;
+
+	kbd_fd = open(devname, O_RDONLY);
+	if (kbd_fd < 0)
+		return;
+
+	if (tcgetattr(kbd_fd, &kbdtty))
+		perror("tcgetattr");
+
+	kbd_orig_tty = kbdtty;
+
+	if (ioctl(kbd_fd, KDGKBMODE, &orig_kbd_mode))
+		perror("ioctl(KDGKBMODE)");
+
+	kbdtty.c_iflag = IGNPAR | IGNBRK;
+	kbdtty.c_oflag = 0;
+	kbdtty.c_cflag = CREAD | CS8;
+	kbdtty.c_lflag = 0;
+	kbdtty.c_cc[VTIME] = 0;
+	kbdtty.c_cc[VMIN] = 1;
+	cfsetispeed(&kbdtty, 9600);
+	cfsetospeed(&kbdtty, 9600);
+	if (tcsetattr(kbd_fd, TCSANOW, &kbdtty) < 0) {
+		perror("tcsetattr");
+	}
+
+	if (ioctl(kbd_fd, KDSKBMODE, K_RAW))
+		perror("ioctl(KDSKBMODE)");
+
+        if (ioctl(kbd_fd, KDGETREPEAT, kbd_orig_repeat))
+                perror("ioctl(KDGETREPEAT)");
+
+        int arg[2];
+        arg[0] = INT_MAX;
+        arg[1] = INT_MAX;
+        if (ioctl(kbd_fd, KDSETREPEAT, arg))
+                perror("ioctl(KDSETREPEAT)");
+}
+
+void close_kbd()
+{
+	if (kbd_fd < 0)
+		return;
+
+	if (tcsetattr(kbd_fd, TCSANOW, &kbd_orig_tty) < 0) {
+		perror("tcsetattr");
+	}
+
+	if (ioctl(kbd_fd, KDSKBMODE, orig_kbd_mode))
+		perror("ioctl(KDSKBMODE)");
+
+        if (ioctl(kbd_fd, KDSETREPEAT, kbd_orig_repeat))
+                perror("ioctl(KDSETREPEAT)");
+
+	close(kbd_fd);
+	kbd_fd = -1;
+}
+
+
+int has_kbd_event( void )
 {
 	struct timeval tv;
 	fd_set fds;
+
+	if (kbd_fd < 0)
+		return 0;
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;
 	FD_ZERO(&fds);
-	FD_SET(STDIN_FILENO, &fds); //STDIN_FILENO is 0
-	select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
-	return FD_ISSET(STDIN_FILENO, &fds);
+	FD_SET(kbd_fd, &fds);
+	select(kbd_fd+1, &fds, NULL, NULL, &tv);
+
+	return FD_ISSET(kbd_fd, &fds);
 }
 
-void nonblock(int state)
-{
-	struct termios ttystate;
-
-	//get the terminal state
-	tcgetattr(STDIN_FILENO, &ttystate);
-
-	if (state==NB_ENABLE)
-	{
-		//turn off canonical mode
-		ttystate.c_lflag &= ~ICANON;
-		//minimum of number input read.
-		ttystate.c_cc[VMIN] = 1;
-	}
-	else if (state==NB_DISABLE)
-	{
-		//turn on canonical mode
-		ttystate.c_lflag |= ICANON;
-	}
-	//set the terminal attributes.
-	tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
-}
+#define MAX_CONSOLE_KEYS 16
 
 /*
 ===============
-IN_TranslateSDLToQ3Key
+IN_IsConsoleKey
 ===============
 */
-static keyNum_t IN_TranslateCharToQ3Key( char c )
+static qboolean IN_IsConsoleKey( keyNum_t key, const unsigned char character )
 {
-   switch (c) {
-   case ';':         return K_LEFTARROW;
-   case '#':         return K_RIGHTARROW;
-   case '\'':        return K_DOWNARROW;
-   case '[':         return K_UPARROW;
-   case ']':         return K_CONSOLE;
-   case 10:          return K_ENTER;
-   }
+	typedef struct consoleKey_s
+	{
+		enum
+		{
+			KEY,
+			CHARACTER
+		} type;
 
-   return c;
+		union
+		{
+			keyNum_t key;
+			unsigned char character;
+		} u;
+	} consoleKey_t;
+
+	static consoleKey_t consoleKeys[ MAX_CONSOLE_KEYS ];
+	static int numConsoleKeys = 0;
+	int i;
+
+	// Only parse the variable when it changes
+	if( cl_consoleKeys->modified )
+	{
+		char *text_p, *token;
+
+		cl_consoleKeys->modified = qfalse;
+		text_p = cl_consoleKeys->string;
+		numConsoleKeys = 0;
+
+		while( numConsoleKeys < MAX_CONSOLE_KEYS )
+		{
+			consoleKey_t *c = &consoleKeys[ numConsoleKeys ];
+			int charCode = 0;
+
+			token = COM_Parse( &text_p );
+			if( !token[ 0 ] )
+				break;
+
+			if( strlen( token ) == 4 )
+				charCode = Com_HexStrToInt( token );
+
+			if( charCode > 0 )
+			{
+				c->type = CHARACTER;
+				c->u.character = (unsigned char)charCode;
+			}
+			else
+			{
+				c->type = KEY;
+				c->u.key = Key_StringToKeynum( token );
+
+				// 0 isn't a key
+				if( c->u.key <= 0 )
+					continue;
+			}
+
+			numConsoleKeys++;
+		}
+	}
+
+	// If the character is the same as the key, prefer the character
+	if( key == character )
+		key = 0;
+
+	for( i = 0; i < numConsoleKeys; i++ )
+	{
+		consoleKey_t *c = &consoleKeys[ i ];
+
+		switch( c->type )
+		{
+			case KEY:
+				if( key && c->u.key == key )
+					return qtrue;
+				break;
+
+			case CHARACTER:
+				if( c->u.character == character )
+					return qtrue;
+				break;
+		}
+	}
+
+	return qfalse;
+}
+
+
+
+void send_kbd_event(uint8_t code, qboolean pressed)
+{
+	keyNum_t key = 0;
+	char ch = 0;
+
+	switch (code) {
+		case SCANCODE_ESCAPE:
+			key = K_ESCAPE;
+			break;
+		case SCANCODE_1:
+		case SCANCODE_2:
+		case SCANCODE_3:
+		case SCANCODE_4:
+		case SCANCODE_5:
+		case SCANCODE_6:
+		case SCANCODE_7:
+		case SCANCODE_8:
+		case SCANCODE_9:
+			key = '1' + code - SCANCODE_1;
+			ch = '1' + code - SCANCODE_1;
+			break;
+		case SCANCODE_0:
+			key = '0';
+			ch = '0';
+			break;
+		case SCANCODE_MINUS:
+			key = '-';
+			ch = '-';
+			break;
+		case SCANCODE_EQUAL:
+			key = '=';
+			ch = '=';
+			break;
+		case SCANCODE_BACKSPACE:
+			key = K_BACKSPACE;
+			break;
+		case SCANCODE_TAB:
+			key = K_TAB;
+			ch = '\t';
+			break;
+		case SCANCODE_Q:
+		case SCANCODE_W:
+		case SCANCODE_E:
+		case SCANCODE_R:
+		case SCANCODE_T:
+		case SCANCODE_Y:
+		case SCANCODE_U:
+		case SCANCODE_I:
+		case SCANCODE_O:
+		case SCANCODE_P:
+		case SCANCODE_BRACKET_LEFT:
+		case SCANCODE_BRACKET_RIGHT: {
+			const char *qwerty = "qwertyuiop[]";
+			key = qwerty[code - SCANCODE_Q];
+			ch = qwerty[code - SCANCODE_Q];
+			break;
+		}
+		case SCANCODE_ENTER:
+			key = K_ENTER;
+			//ch = ;
+			break;
+		case SCANCODE_RIGHTCONTROL:
+		case SCANCODE_LEFTCONTROL:
+			key = K_CTRL;
+			break;
+		case SCANCODE_A:
+		case SCANCODE_S:
+		case SCANCODE_D:
+		case SCANCODE_F:
+		case SCANCODE_G:
+		case SCANCODE_H:
+		case SCANCODE_J:
+		case SCANCODE_K:
+		case SCANCODE_L:
+		case SCANCODE_SEMICOLON:
+		case SCANCODE_APOSTROPHE:
+		case SCANCODE_GRAVE: {
+			const char *asdf = "asdfghjkl;'`";
+			key = asdf[code - SCANCODE_A];
+			ch = asdf[code - SCANCODE_A];
+			break;
+		}
+		case SCANCODE_LEFTSHIFT:
+		case SCANCODE_RIGHTSHIFT:
+			key = K_SHIFT;
+			break;
+		case SCANCODE_BACKSLASH:
+		case SCANCODE_Z:
+		case SCANCODE_X:
+		case SCANCODE_C:
+		case SCANCODE_V:
+		case SCANCODE_B:
+		case SCANCODE_N:
+		case SCANCODE_M:
+		case SCANCODE_COMMA:
+		case SCANCODE_PERIOD:
+		case SCANCODE_SLASH: {
+			const char *zxcv = "\\zxcvbnm,./";
+			key = zxcv[code - SCANCODE_BACKSLASH];
+			ch = zxcv[code - SCANCODE_BACKSLASH];
+			break;
+		}
+
+		case SCANCODE_KEYPADMULTIPLY: key = K_KP_STAR; break;
+
+		case SCANCODE_LEFTALT:
+		case SCANCODE_RIGHTALT:
+			key = K_ALT;
+			break;
+		case SCANCODE_SPACE:
+			key = ' ';
+			ch = ' ';
+			break;
+		case SCANCODE_CAPSLOCK:	key = K_CAPSLOCK; break;
+		case SCANCODE_F1:	key = K_F1; break;
+		case SCANCODE_F2:	key = K_F2; break;
+		case SCANCODE_F3:	key = K_F3; break;
+		case SCANCODE_F4:	key = K_F4; break;
+		case SCANCODE_F5:	key = K_F5; break;
+		case SCANCODE_F6:	key = K_F6; break;
+		case SCANCODE_F7:	key = K_F7; break;
+		case SCANCODE_F8:	key = K_F8; break;
+		case SCANCODE_F9:	key = K_F9; break;
+		case SCANCODE_F10:	key = K_F10; break;
+
+		case SCANCODE_NUMLOCK:		key = K_KP_NUMLOCK; break;
+		case SCANCODE_SCROLLLOCK:	key = K_SCROLLOCK; break;
+		case SCANCODE_KEYPAD7:		key = K_KP_PGDN; break;
+		case SCANCODE_KEYPAD8:		key = K_KP_UPARROW; break;
+		case SCANCODE_KEYPAD9: 		key = K_KP_PGUP; break;
+		case SCANCODE_KEYPADMINUS:	key = K_KP_MINUS; break;
+		case SCANCODE_KEYPAD4:		key = K_KP_LEFTARROW; break;
+		case SCANCODE_KEYPAD5:		key = K_KP_5; break;
+		case SCANCODE_KEYPAD6:		key = K_KP_RIGHTARROW; break;
+		case SCANCODE_KEYPADPLUS:	key = K_KP_PLUS; break;
+		case SCANCODE_KEYPAD1:		key = K_KP_END; break;
+		case SCANCODE_KEYPAD2:		key = K_KP_DOWNARROW; break;
+		case SCANCODE_KEYPAD3:		key = K_KP_PGDN; break;
+		case SCANCODE_KEYPAD0:		key = K_KP_INS; break;
+		case SCANCODE_KEYPADPERIOD:	key = K_KP_DEL; break;
+		case SCANCODE_F11:			key = K_F11; break;
+		case SCANCODE_F12:			key = K_F12; break;
+		case SCANCODE_KEYPADENTER:		key = K_KP_ENTER; break;
+		case SCANCODE_KEYPADDIVIDE: 		key = K_KP_SLASH; break;
+		case SCANCODE_PRINTSCREEN:		key = K_PRINT; break;
+		case SCANCODE_BREAK:
+		case SCANCODE_BREAK_ALTERNATIVE:	key = K_BREAK; break;
+		case SCANCODE_HOME:			key = K_HOME; break;
+		case SCANCODE_PAGEUP:			key = K_PGUP; break;
+		case SCANCODE_CURSORBLOCKLEFT:		key = K_LEFTARROW; break;
+		case SCANCODE_CURSORBLOCKRIGHT:		key = K_RIGHTARROW; break;
+		case SCANCODE_CURSORBLOCKUP:		key = K_UPARROW; break;
+		case SCANCODE_CURSORBLOCKDOWN:		key = K_DOWNARROW; break;
+		case SCANCODE_END:			key = K_END; break;
+		case SCANCODE_PAGEDOWN:			key = K_PGUP; break;
+		case SCANCODE_INSERT:			key = K_INS; break;
+
+		case SCANCODE_RIGHTWIN:
+		case SCANCODE_LEFTWIN:
+			key = K_COMMAND;
+			break;
+	}
+
+	if( IN_IsConsoleKey( key, ch ) )
+	{
+		// Console keys can't be bound or generate characters
+		key = K_CONSOLE;
+		ch = 0;
+	}
+
+	if (key)
+		Com_QueueEvent( 0, SE_KEY, key, pressed, 0, NULL );
+
+	if (ch && pressed)
+		Com_QueueEvent( 0, SE_CHAR, ch, 0, 0, NULL );
+}
+
+void process_kbd_events( void )
+{
+	uint8_t code[4];
+	int bytes;
+
+	if (kbd_fd < 0)
+		return;
+
+	/* for RAW mode there can be two bytes */
+	bytes = read(kbd_fd, code, sizeof(code));
+	for (int i = 0; i < bytes; i++) {
+		send_kbd_event(code[i] & 0x7f, ((code[i] & 0x80) ? qfalse : qtrue));
+	}
+}
+
+void init_mouse(const char *devname)
+{
+	mouse_fd = open(devname, O_RDONLY);
+	if (mouse_fd < 0)
+		return;
+
+	int level = 1;
+	if (ioctl(mouse_fd, MOUSE_SETLEVEL, &level)) {
+		close(mouse_fd);
+		return;
+	}
+}
+
+int has_mouse_event( void )
+{
+	struct timeval tv;
+	fd_set fds;
+
+	if (mouse_fd < 0)
+		return 0;
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	FD_ZERO(&fds);
+	FD_SET(mouse_fd, &fds);
+	select(mouse_fd+1, &fds, NULL, NULL, &tv);
+
+	return FD_ISSET(mouse_fd, &fds);
+}
+
+void send_mouse_event(int button, int pressed)
+{
+	uint8_t b;
+	switch( button)
+	{
+		case 0:   b = K_MOUSE3;     break;
+		case 1:   b = K_MOUSE2;     break;
+		case 2:   b = K_MOUSE1;     break;
+		default:  b = 0xff;
+	}
+
+	if (b != 0xff)
+		Com_QueueEvent( 0, SE_KEY, b, ( pressed ? qtrue : qfalse ), 0, NULL );
+
+}
+
+void process_mouse_events( void )
+{
+	int8_t packet[MOUSE_SYS_PACKETSIZE];
+	uint8_t status, changed;
+	int16_t relx, rely;
+
+	if (mouse_fd < 0)
+		return;
+
+	if (read(mouse_fd, packet, sizeof(packet)) < sizeof(packet))
+		return;
+
+	status = packet[0] & MOUSE_SYS_STDBUTTONS;
+	changed = status ^ mouse_buttons;
+	if (changed) {
+		for (int i = 0; i < 3; i++)
+			if (changed & (1<<i))
+				send_mouse_event(i, ((status & (1<<i)) == 0));
+	}
+
+	mouse_buttons = status;
+	relx = packet[1] + packet[3];
+	rely = -(packet[2] + packet[4]);
+	Com_QueueEvent( 0, SE_MOUSE, relx, rely, 0, NULL );
+}
+
+void close_mouse()
+{
+	close(mouse_fd);
+	mouse_fd = -1;
 }
 
 /*
@@ -291,17 +496,12 @@ IN_ProcessEvents
 */
 static void IN_ProcessEvents( void )
 {
-	while (kbhit()) {
-		char c = fgetc(stdin);
+	while (has_kbd_event()) {
+		process_kbd_events();
+	}
 
-		int key = IN_TranslateCharToQ3Key(c);
-
-		Com_QueueEvent( 0, SE_CHAR, c, 0, 0, NULL );
-
-		if( key ) {
-			Com_QueueEvent( 0, SE_KEY, key, qtrue, 0, NULL );
-			Com_QueueEvent( 0, SE_KEY, key, qfalse, 0, NULL );
-		}
+	while (has_mouse_event()) {
+		process_mouse_events();
 	}
 }
 
@@ -312,10 +512,9 @@ IN_Init
 */
 void IN_Init( void )
 {
-	nonblock(NB_ENABLE);
+	init_mouse("/dev/ums0");
+	init_kbd("/dev/ttyv0");
 }
-
-#endif
 
 /*
 ===============
@@ -334,6 +533,7 @@ IN_Shutdown
 */
 void IN_Shutdown( void )
 {
+	close_kbd();
 }
 
 /*
