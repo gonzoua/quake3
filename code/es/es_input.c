@@ -48,24 +48,39 @@ static struct termios kbd_orig_tty;
 static int orig_kbd_mode;
 static int kbd_orig_repeat[2];
 
-void init_kbd(const char *devname)
+void init_kbd()
 {
 	struct termios kbdtty;
 
-	kbd_fd = open(devname, O_RDONLY);
+	kbd_fd = fileno(stdin);
 	if (kbd_fd < 0)
 		return;
 
-	if (tcgetattr(kbd_fd, &kbdtty))
+	if (ioctl(kbd_fd, KDGKBMODE, &orig_kbd_mode)) {
+		perror("ioctl(KDGKBMODE)");
+		goto out;
+	}
+
+	if (ioctl(kbd_fd, KDGETREPEAT, kbd_orig_repeat)) {
+                perror("ioctl(KDGETREPEAT)");
+		goto out;
+	}
+
+
+	if (ioctl(kbd_fd, KDSKBMODE, K_CODE)) {
+		perror("ioctl(KDSKBMODE)");
+		goto out;
+	}
+
+      	if (tcgetattr(kbd_fd, &kbdtty)) {
 		perror("tcgetattr");
+		goto out;
+	}
 
 	kbd_orig_tty = kbdtty;
 
-	if (ioctl(kbd_fd, KDGKBMODE, &orig_kbd_mode))
-		perror("ioctl(KDGKBMODE)");
-
 	kbdtty.c_iflag = IGNPAR | IGNBRK;
-	kbdtty.c_oflag = 0;
+	/* kbdtty.c_oflag = 0; */
 	kbdtty.c_cflag = CREAD | CS8;
 	kbdtty.c_lflag = 0;
 	kbdtty.c_cc[VTIME] = 0;
@@ -74,19 +89,18 @@ void init_kbd(const char *devname)
 	cfsetospeed(&kbdtty, 9600);
 	if (tcsetattr(kbd_fd, TCSANOW, &kbdtty) < 0) {
 		perror("tcsetattr");
+		goto out;
 	}
-
-	if (ioctl(kbd_fd, KDSKBMODE, K_CODE))
-		perror("ioctl(KDSKBMODE)");
-
-        if (ioctl(kbd_fd, KDGETREPEAT, kbd_orig_repeat))
-                perror("ioctl(KDGETREPEAT)");
 
         int arg[2];
         arg[0] = INT_MAX;
         arg[1] = INT_MAX;
         if (ioctl(kbd_fd, KDSETREPEAT, arg))
                 perror("ioctl(KDSETREPEAT)");
+	return;
+
+out:
+	kbd_fd = -1;
 }
 
 void close_kbd()
@@ -104,7 +118,6 @@ void close_kbd()
         if (ioctl(kbd_fd, KDSETREPEAT, kbd_orig_repeat))
                 perror("ioctl(KDSETREPEAT)");
 
-	close(kbd_fd);
 	kbd_fd = -1;
 }
 
@@ -410,9 +423,12 @@ void process_kbd_events( void )
 	}
 }
 
-void init_mouse(const char *devname)
+#define DEFAULT_MOUSE "/dev/sysmouse"
+void init_mouse()
 {
-	mouse_fd = open(devname, O_RDONLY);
+	char *devname = getenv("Q_MOUSE_DEV");
+
+	mouse_fd = open(devname != NULL ? devname : DEFAULT_MOUSE, O_RDONLY);
 	if (mouse_fd < 0)
 		return;
 
@@ -510,8 +526,8 @@ IN_Init
 */
 void IN_Init( void )
 {
-	init_mouse("/dev/ums0");
-	init_kbd("/dev/ttyv0");
+	init_mouse();
+	init_kbd();
 }
 
 /*
@@ -532,6 +548,7 @@ IN_Shutdown
 void IN_Shutdown( void )
 {
 	close_kbd();
+	close_mouse();
 }
 
 /*
