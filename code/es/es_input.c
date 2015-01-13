@@ -76,7 +76,7 @@ void init_kbd(const char *devname)
 		perror("tcsetattr");
 	}
 
-	if (ioctl(kbd_fd, KDSKBMODE, K_RAW))
+	if (ioctl(kbd_fd, KDSKBMODE, K_CODE))
 		perror("ioctl(KDSKBMODE)");
 
         if (ioctl(kbd_fd, KDGETREPEAT, kbd_orig_repeat))
@@ -365,8 +365,7 @@ void send_kbd_event(uint8_t code, qboolean pressed)
 		case SCANCODE_KEYPADENTER:		key = K_KP_ENTER; break;
 		case SCANCODE_KEYPADDIVIDE: 		key = K_KP_SLASH; break;
 		case SCANCODE_PRINTSCREEN:		key = K_PRINT; break;
-		case SCANCODE_BREAK:
-		case SCANCODE_BREAK_ALTERNATIVE:	key = K_BREAK; break;
+		case SCANCODE_BREAK:			key = K_BREAK; break;
 		case SCANCODE_HOME:			key = K_HOME; break;
 		case SCANCODE_PAGEUP:			key = K_PGUP; break;
 		case SCANCODE_CURSORBLOCKLEFT:		key = K_LEFTARROW; break;
@@ -405,7 +404,6 @@ void process_kbd_events( void )
 	if (kbd_fd < 0)
 		return;
 
-	/* for RAW mode there can be two bytes */
 	bytes = read(kbd_fd, code, sizeof(code));
 	for (int i = 0; i < bytes; i++) {
 		send_kbd_event(code[i] & 0x7f, ((code[i] & 0x80) ? qfalse : qtrue));
