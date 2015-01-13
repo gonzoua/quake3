@@ -220,6 +220,7 @@ GLimp_Shutdown
 */
 void GLimp_Shutdown( void )
 {
+    IN_Shutdown();
 }
 
 /*
