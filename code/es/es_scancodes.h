@@ -1,5 +1,7 @@
 /* Scancodes for the Linux framebuffer console
    - Taken with thanks from SVGAlib 1.4.0
+
+   Then taken from SDL nd modified to BSD scancodes
 */
 
 #define SCANCODE_ESCAPE			1
